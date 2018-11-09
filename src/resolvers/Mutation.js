@@ -10,7 +10,7 @@ const Mutations = {
   async createItem(parent, args, ctx, info) {
     // TODO: Check if logged in
     if(!ctx.request.userId) {
-      throw new Error('You must be logged in to do that!');
+      throw new Error(`You must be logged in to do that!`);
     }
 
     const item = await ctx.db.mutation.createItem({
@@ -50,7 +50,7 @@ const Mutations = {
     // 2. check for permissions
     const ownsItem = item.user.id === ctx.request.userId;
     const hasPermissions = ctx.request.user.permissions.some(permission => 
-      ['ADMIN', 'ITEMDELETE'].includes(permission));
+      [`ADMIN`, `ITEMDELETE`].includes(permission));
     
     if(!ownsItem && !hasPermissions) {
       throw new Error(`You don't have permission to do that.`);
@@ -69,7 +69,7 @@ const Mutations = {
         data: {
           ...args,
           password,
-          permissions: { set: ['USER'] },
+          permissions: { set: [`USER`] },
         },
       }, 
       info
@@ -77,7 +77,7 @@ const Mutations = {
     // Create the JWT
     const token = jwt.sign({ userId: user.id }, process.env.APP_SECRET);
     // Set the JWT as a cookie on the response
-    ctx.response.cookie('token', token, {
+    ctx.response.cookie(`token`, token, {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year cookie
     });
@@ -92,12 +92,12 @@ const Mutations = {
     // Check for correct password
     const valid = await bcrypt.compare(password, user.password);
     if(!valid) {
-      throw new Error('Invalid Password');
+      throw new Error(`Invalid Password`);
     }
     // Generate JWT
     const token = jwt.sign({ userId: user.id }, process.env.APP_SECRET);
     // Set the cookie with token
-    ctx.response.cookie('token', token, {
+    ctx.response.cookie(`token`, token, {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 365,
     });
@@ -105,8 +105,8 @@ const Mutations = {
     return user;
   },
   signout(parent, args, ctx, info) {
-    ctx.response.clearCookie('token');
-    return { message: 'Goodbye!' };
+    ctx.response.clearCookie(`token`);
+    return { message: `Goodbye!` };
   },
   async requestReset(parent, { email }, ctx, info) {
     // Check if the user exists
@@ -116,7 +116,7 @@ const Mutations = {
     }
     // Set a reset token and expiry on user
     const randomBytesPromisified = promisify(randomBytes);
-    const resetToken = (await randomBytesPromisified(20)).toString('hex');
+    const resetToken = (await randomBytesPromisified(20)).toString(`hex`);
     const resetTokenExpiry = Date.now() + 3600000; // 1 hour from now
     const res = await ctx.db.mutation.updateUser({
       where: { email },
@@ -124,9 +124,9 @@ const Mutations = {
     });
     // Email the reset token
     const mailRes = await transport.sendMail({
-      from: 'zach@mail.com',
+      from: `zach@mail.com`,
       to: user.email,
-      subject: 'Your password reset token',
+      subject: `Your password reset token`,
       html: makeANiceEmail(`
         Your Password Reset Token is here! 
         \n\n 
@@ -137,12 +137,12 @@ const Mutations = {
     })
     
     // Return success message
-    return { message: 'Thanks' }
+    return { message: `Thanks` }
   },
   async resetPassword(parent, args, ctx, info) {
     // Check that the passwords match
     if(args.password !== args.confirmPassword) {
-      throw new Error('Your Passwords do not match');
+      throw new Error(`Your Passwords do not match`);
     }
     // Check for good reset token
     // Check if reset token expired
@@ -153,7 +153,7 @@ const Mutations = {
       },
     });
     if(!user) {
-      throw new Error('This token is invalid or expired.');
+      throw new Error(`This token is invalid or expired.`);
     }
     // Hash new password
     const password = await bcrypt.hash(args.password, 10);
@@ -169,7 +169,7 @@ const Mutations = {
     // Generate JWT
     const token = jwt.sign({ userId: updatedUser.id }, process.env.APP_SECRET);
     // Set the JWT cookie
-    ctx.response.cookie('token', token, {
+    ctx.response.cookie(`token`, token, {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 365,
     });
@@ -179,7 +179,7 @@ const Mutations = {
   async updatePermissions(parent, args, ctx, info) {
     // Check if user is logged in
     if(!ctx.request.userId) {
-      throw new Error('You must be logged in.');
+      throw new Error(`You must be logged in.`);
     }
     // Query the current user
     const currentUser = await ctx.db.query.user({
@@ -190,7 +190,7 @@ const Mutations = {
     info
     );
     // Check if user has permissions to make changeds
-    hasPermission(currentUser, ['ADMIN', 'PERMISSIONUPDATE']);
+    hasPermission(currentUser, [`ADMIN`, `PERMISSIONUPDATE`]);
     // Update the permissions
     return ctx.db.mutation.updateUser({
       data: {
@@ -207,7 +207,7 @@ const Mutations = {
     // Make sure user is signed in
     const { userId } = ctx.request;
     if(!userId) {
-      throw new Error('You must be signed in');
+      throw new Error(`You must be signed in`);
     }
     // Query the users existing cart
     const [existingCartItem] = await ctx.db.query.cartItems({
@@ -218,7 +218,7 @@ const Mutations = {
     });
     // Check if item is already in cart and increment qty
     if(existingCartItem) {
-      console.log('This item is already in your cart');
+      console.log(`This item is already in your cart`);
       return ctx.db.mutation.updateCartItem({
         where: { id: existingCartItem.id },
         data: { quantity: existingCartItem.quantity + 1 },
@@ -236,6 +236,28 @@ const Mutations = {
           connect: { id: args.id },
         },
       },
+    }, info);
+  },
+  async removeFromCart(parent, args, ctx, info) {
+    // Find the cart item
+    const cartItem = await ctx.db.query.cartItem({
+      where: {
+        id: args.id,
+      },
+    }, `{ id, user { id }}`);
+    // Make sure found an item
+    if(!cartItem) {
+      throw new Error(`No Cart Item Found!`);
+    }
+    // Make sure item is in users cart
+    if(cartItem.user.id !== ctx.request.userId) {
+      throw new Error(`Sorry you can't do that.`);
+    }
+    // Delete the cart item
+    return ctx.db.mutation.deleteCartItem({
+      where: {
+        id: args.id
+      }
     }, info);
   },
 };
